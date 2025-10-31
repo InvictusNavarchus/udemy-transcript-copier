@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Udemy Transcript Copier
 // @namespace    http://tampermonkey.net/
-// @version      0.3.0
-// @description  Adds a button to copy the entire course transcript on Udemy.
+// @version      0.4.0
+// @description  Adds a button to copy the entire course transcript and metadata on Udemy.
 // @author       You
 // @match        https://*.udemy.com/course/*
 // @grant        none
@@ -32,26 +32,128 @@
     // --- 2. Core Functionality ---
 
     /**
+     * Finds and parses the course data JSON blob from the page's HTML.
+     * @returns {object | null} The parsed course data or null if not found.
+     */
+    function getCourseData() {
+        console.log(getPrefix(), 'Attempting to find course data JSON blob...');
+        const dataEl = document.querySelector('.ud-app-loader[data-module-args]');
+        if (!dataEl || !dataEl.dataset.moduleArgs) {
+            console.error(getPrefix(), 'Could not find the data-module-args element.');
+            return null;
+        }
+
+        try {
+            const data = JSON.parse(dataEl.dataset.moduleArgs);
+            console.log(getPrefix(), 'Successfully parsed course data.');
+            return data;
+        } catch (e) {
+            console.error(getPrefix(), 'Failed to parse course data JSON:', e);
+            return null;
+        }
+    }
+
+    /**
      * Handles the copy to clipboard action and provides user feedback.
      * @param {HTMLButtonElement} button - The button that was clicked.
      */
     async function handleCopyClick(button) {
         console.log(getPrefix(), 'Copy button clicked.');
+        let headerLines = [];
 
-        // 1. Get Section and Lecture Info
-        // We look for the currently active items in the course content panel
-        const lectureTitleEl = document.querySelector('li[aria-current="true"] span[data-purpose="item-title"]');
-        const currentLectureItem = document.querySelector('li[aria-current="true"]');
-        const sectionPanel = currentLectureItem ? currentLectureItem.closest('div[data-purpose*="section-panel-"]') : null;
-        const sectionTitleEl = sectionPanel ? sectionPanel.querySelector('span.ud-accordion-panel-title > span') : null;
+        // 1. Get Data from JSON Blob
+        const courseData = getCourseData();
+        if (courseData) {
+            try {
+                // Course Title (from DOM, as it's not in the JSON)
+                const courseTitleEl = document.querySelector('span.curriculum-item-view--course-title--s5jCa');
+                if (courseTitleEl) {
+                    headerLines.push(`# ${courseTitleEl.textContent.trim()}`);
+                }
 
-        const lectureTitle = lectureTitleEl ? lectureTitleEl.textContent.trim() : 'Unknown Lecture';
-        const sectionTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Unknown Section';
+                // Course Subtitle (from DOM)
+                const courseSubtitleEl = document.querySelector('div[data-purpose="title"]');
+                if (courseSubtitleEl) {
+                    headerLines.push(`## *${courseSubtitleEl.textContent.trim()}*`);
+                }
+                headerLines.push('---');
 
-        console.log(getPrefix(), `Found Section: ${sectionTitle}`);
-        console.log(getPrefix(), `Found Lecture: ${lectureTitle}`);
+                // 2. Get Current Section and Lecture Info (from DOM)
+                const lectureTitleEl = document.querySelector('li[aria-current="true"] span[data-purpose="item-title"]');
+                const currentLectureItem = document.querySelector('li[aria-current="true"]');
+                const sectionPanel = currentLectureItem ? currentLectureItem.closest('div[data-purpose*="section-panel-"]') : null;
+                const sectionTitleEl = sectionPanel ? sectionPanel.querySelector('span.ud-accordion-panel-title > span') : null;
 
-        // 2. Get Transcript Text
+                const lectureTitle = lectureTitleEl ? lectureTitleEl.textContent.trim() : 'Unknown Lecture';
+                const sectionTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Unknown Section';
+                headerLines.push(`**Section:** ${sectionTitle}`);
+                headerLines.push(`**Lecture:** ${lectureTitle}`);
+                headerLines.push('---');
+
+                // 3. Get Metadata from JSON
+                headerLines.push('**Course Details:**');
+                
+                // Instructors
+                if (courseData.instructorInfo && courseData.instructorInfo.instructors_info) {
+                    const instructors = courseData.instructorInfo.instructors_info
+                        .map(inst => `${inst.title} (${inst.job_title})`)
+                        .join(', ');
+                    headerLines.push(`* **Instructors:** ${instructors}`);
+                }
+
+                // Course Stats from courseLeadData
+                if (courseData.courseLeadData) {
+                    const leadData = courseData.courseLeadData;
+                    const rating = leadData.rating ? leadData.rating.toFixed(2) : 'N/A';
+                    const reviews = leadData.num_reviews ? leadData.num_reviews.toLocaleString() : 'N/A';
+                    headerLines.push(`* **Rating:** ${rating} (${reviews} reviews)`);
+                    if (leadData.content_info_short) {
+                        headerLines.push(`* **Total Length:** ${leadData.content_info_short}`);
+                    }
+                    if (leadData.last_update_date) {
+                        headerLines.push(`* **Last Updated:** ${leadData.last_update_date}`);
+                    }
+                    if (leadData.captionedLanguages && leadData.captionedLanguages.length > 0) {
+                        headerLines.push(`* **Captions:** ${leadData.captionedLanguages.join(', ')}`);
+                    }
+                }
+                
+                // Language (from DOM)
+                const langEl = document.querySelector('div[data-purpose="language"] .course-lead--caption---JHbX');
+                if (langEl) {
+                     // Get only the language text, not the icon text
+                    const langText = Array.from(langEl.childNodes)
+                        .filter(node => node.nodeType === Node.TEXT_NODE)
+                        .map(node => node.textContent.trim())
+                        .join('');
+                    if(langText) {
+                        headerLines.push(`* **Language:** ${langText}`);
+                    }
+                }
+
+                headerLines.push('---');
+                headerLines.push('## Transcript\n'); // Add extra newline for spacing
+
+            } catch (e) {
+                console.error(getPrefix(), 'Failed to build metadata header:', e);
+                headerLines = []; // Clear header on error to avoid partial data
+            }
+        } else {
+            console.warn(getPrefix(), 'Could not parse course data. Falling back to simple Section/Lecture titles.');
+            // Fallback to old method if JSON fails
+            const lectureTitleEl = document.querySelector('li[aria-current="true"] span[data-purpose="item-title"]');
+            const currentLectureItem = document.querySelector('li[aria-current="true"]');
+            const sectionPanel = currentLectureItem ? currentLectureItem.closest('div[data-purpose*="section-panel-"]') : null;
+            const sectionTitleEl = sectionPanel ? sectionPanel.querySelector('span.ud-accordion-panel-title > span') : null;
+
+            const lectureTitle = lectureTitleEl ? lectureTitleEl.textContent.trim() : 'Unknown Lecture';
+            const sectionTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Unknown Section';
+            headerLines.push(`# ${sectionTitle}`);
+            headerLines.push(`## ${lectureTitle}\n`);
+        }
+
+
+        // 4. Get Transcript Text (from DOM)
         const transcriptPanel = document.querySelector('div[data-purpose="transcript-panel"]');
         if (!transcriptPanel) {
             console.error(getPrefix(), 'Transcript panel not found when trying to copy.');
@@ -68,8 +170,8 @@
 
         console.log(getPrefix(), `Found ${textElements.length} transcript lines to copy.`);
 
-        // 3. Format the final text
-        const header = `# ${sectionTitle}\n## ${lectureTitle}\n\n`;
+        // 5. Format the final text
+        const header = headerLines.join('\n');
         const transcriptLines = Array.from(textElements)
             .map(el => el.textContent.trim())
             .join('\n'); // Join with a newline for proper formatting.
@@ -180,5 +282,6 @@
     initializeObserver();
 
 })();
+
 
 
