@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Udemy Transcript Copier
 // @namespace    http://tampermonkey.net/
-// @version      0.2.0
+// @version      0.3.0
 // @description  Adds a button to copy the entire course transcript on Udemy.
 // @author       You
 // @match        https://*.udemy.com/course/*
@@ -38,6 +38,20 @@
     async function handleCopyClick(button) {
         console.log(getPrefix(), 'Copy button clicked.');
 
+        // 1. Get Section and Lecture Info
+        // We look for the currently active items in the course content panel
+        const lectureTitleEl = document.querySelector('li[aria-current="true"] span[data-purpose="item-title"]');
+        const currentLectureItem = document.querySelector('li[aria-current="true"]');
+        const sectionPanel = currentLectureItem ? currentLectureItem.closest('div[data-purpose*="section-panel-"]') : null;
+        const sectionTitleEl = sectionPanel ? sectionPanel.querySelector('span.ud-accordion-panel-title > span') : null;
+
+        const lectureTitle = lectureTitleEl ? lectureTitleEl.textContent.trim() : 'Unknown Lecture';
+        const sectionTitle = sectionTitleEl ? sectionTitleEl.textContent.trim() : 'Unknown Section';
+
+        console.log(getPrefix(), `Found Section: ${sectionTitle}`);
+        console.log(getPrefix(), `Found Lecture: ${lectureTitle}`);
+
+        // 2. Get Transcript Text
         const transcriptPanel = document.querySelector('div[data-purpose="transcript-panel"]');
         if (!transcriptPanel) {
             console.error(getPrefix(), 'Transcript panel not found when trying to copy.');
@@ -54,9 +68,13 @@
 
         console.log(getPrefix(), `Found ${textElements.length} transcript lines to copy.`);
 
-        const transcriptText = Array.from(textElements)
+        // 3. Format the final text
+        const header = `# ${sectionTitle}\n## ${lectureTitle}\n\n`;
+        const transcriptLines = Array.from(textElements)
             .map(el => el.textContent.trim())
             .join('\n'); // Join with a newline for proper formatting.
+        
+        const transcriptText = header + transcriptLines;
 
         try {
             await navigator.clipboard.writeText(transcriptText);
@@ -162,4 +180,5 @@
     initializeObserver();
 
 })();
+
 
