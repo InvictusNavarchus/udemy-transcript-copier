@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Udemy Transcript Copier
 // @namespace    http://tampermonkey.net/
-// @version      0.5.0
+// @version      0.6.0
 // @description  Adds a button to copy the entire course transcript and metadata on Udemy, with configurable settings.
 // @author       You
 // @match        https://*.udemy.com/course/*
@@ -96,6 +96,53 @@
     }
 
     /**
+     * Applies a preset configuration to the settings checkboxes.
+     * @param {string} presetName - The name of the preset to apply.
+     */
+    function applyPreset(presetName) {
+        const panel = document.getElementById('utc-settings-panel');
+        if (!panel) return;
+
+        let presetConfig = {};
+        
+        if (presetName === 'course-details') {
+            // Course Details: Everything except section/lecture
+            presetConfig = {
+                includeCourseTitle: true,
+                includeCourseSubtitle: true,
+                includeSectionLecture: false,
+                includeInstructors: true,
+                includeRating: true,
+                includeLength: true,
+                includeLastUpdated: true,
+                includeCaptions: true,
+                includeLanguage: true,
+            };
+        } else if (presetName === 'section-details') {
+            // Section Details: Only section/lecture info
+            presetConfig = {
+                includeCourseTitle: false,
+                includeCourseSubtitle: false,
+                includeSectionLecture: true,
+                includeInstructors: false,
+                includeRating: false,
+                includeLength: false,
+                includeLastUpdated: false,
+                includeCaptions: false,
+                includeLanguage: false,
+            };
+        }
+
+        // Apply preset to checkboxes
+        for (const key in presetConfig) {
+            const checkbox = panel.querySelector(`input[name="${key}"]`);
+            if (checkbox) {
+                checkbox.checked = presetConfig[key];
+            }
+        }
+    }
+
+    /**
      * Creates the HTML for the settings panel.
      * @returns {HTMLElement} The settings panel element.
      */
@@ -111,6 +158,10 @@
 
         panel.innerHTML = `
             <h4 class="ud-heading-md" style="margin-bottom: 15px;">Metadata to Include</h4>
+            <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+                <button id="utc-preset-course" class="ud-btn ud-btn-xsmall ud-btn-secondary" style="flex: 1;">Course Details</button>
+                <button id="utc-preset-section" class="ud-btn ud-btn-xsmall ud-btn-secondary" style="flex: 1;">Section Details</button>
+            </div>
             <div id="utc-settings-list" style="display: flex; flex-direction: column; gap: 10px;">
                 <!-- Checkboxes will be injected here by loadSettingsToUI -->
             </div>
@@ -121,6 +172,8 @@
         `;
 
         // Add event listeners
+        panel.querySelector('#utc-preset-course').addEventListener('click', () => applyPreset('course-details'));
+        panel.querySelector('#utc-preset-section').addEventListener('click', () => applyPreset('section-details'));
         panel.querySelector('#utc-save-settings').addEventListener('click', saveSettings);
         panel.querySelector('#utc-close-settings').addEventListener('click', () => {
             panel.style.display = 'none';
