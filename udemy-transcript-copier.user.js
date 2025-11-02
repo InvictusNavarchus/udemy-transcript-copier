@@ -7,8 +7,17 @@
 // @match        https://*.udemy.com/course/*
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @license      MIT
+// @license      MPL-2.0
 // ==/UserScript==
+
+/*
+ * Copyright (c) 2025 Invictus Navarchus
+ *
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
 
 (function() {
     'use strict';
